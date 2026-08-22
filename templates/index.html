@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linux Log Analyzer</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #0d0d0dd5; --panel2: #10101bbc; --border: #292929e5; --text: #d8e1e8;
+    --muted: #787878; --accent: #3186e8ce; --accent2: #546d9f; --danger: #ff6b6b; --warn: #ffb74f;
+    --ok: #4fd18b; --critical: #ff3b6b;  
+  }   #252d5f
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+    display: flex; min-height: 100vh;
+  }
+  a { color: var(--accent); }
+
+  /* ---------- Sidebar ---------- */
+  #sidebar {
+    width: 320px; flex-shrink: 0; background: #0d1319; border-right: 1px solid var(--border);
+    padding: 24px 20px; display: flex; flex-direction: column; gap: 18px;
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .brand .icon { font-size: 26px; }
+  .brand h1 { font-size: 17px; margin: 0; }
+  .brand p { margin: 2px 0 0 0; font-size: 11px; color: var(--muted); }
+
+  .drop-zone {
+    border: 2px dashed var(--border); border-radius: 12px; padding: 22px 14px; text-align: center;
+    cursor: pointer; transition: all 0.15s ease; background: var(--panel);
+  }
+  .drop-zone.dragover { border-color: var(--accent); background: rgba(255,59,59,0.08); }
+  .drop-zone .dz-icon { font-size: 26px; margin-bottom: 6px; }
+  .drop-zone .dz-text { font-size: 12.5px; color: var(--muted); }
+  .drop-zone .dz-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  #file-input { display: none; }
+
+  .file-list { display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto; }
+  .file-chip {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 10px; font-size: 11.5px; font-family: Consolas, monospace;
+  }
+  .file-chip .remove-btn { color: var(--danger); cursor: pointer; font-weight: 700; }
+
+  fieldset { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin: 0; }
+  legend { font-size: 10.5px; letter-spacing: 0.05em; color: var(--accent); text-transform: uppercase; padding: 0 6px; }
+  .field { margin-bottom: 10px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+  .field input, .field textarea {
+    width: 100%; background: #0d1319; color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 9px; font-size: 12.5px; font-family: Consolas, monospace;
+  }
+  .field textarea { resize: vertical; min-height: 44px; }
+  .field .hint { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+
+  #analyze-btn {
+    background: var(--accent); color: #ffffff; border: none; border-radius: 10px;
+    padding: 13px; font-size: 14px; font-weight: 700; cursor: pointer; transition: background 0.15s;
+  }
+  #analyze-btn:hover { background: var(--accent2); }
+  #analyze-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  #status-line { font-size: 11.5px; color: var(--muted); text-align: center; min-height: 14px; }
+
+  .spinner {
+    width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #ffffff;
+    border-radius: 50%; display: inline-block; animation: spin 0.7s linear infinite; margin-right: 6px;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Main content ---------- */
+  #main { flex: 1; padding: 28px 34px; min-width: 0; }
+  #empty-state { color: var(--muted); text-align: center; margin-top: 120px; }
+  #empty-state .big-icon { font-size: 44px; margin-bottom: 12px; }
+
+  #results { display: none; }
+  .badges { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .badge { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 18px; min-width: 130px; }
+  .badge .num { font-size: 24px; font-weight: 700; }
+  .badge .label { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .badge.accent .num { color: var(--accent); }
+  .badge.danger .num { color: var(--danger); }
+  .badge.ok .num { color: var(--ok); }
+  .badge.warn .num { color: var(--warn); }
+
+  .download-row { display: flex; gap: 10px; margin: 14px 0 20px 0; }
+  .download-row a {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 8px; font-size: 12.5px; text-decoration: none;
+  }
+  .download-row a:hover { border-color: var(--accent); }
+
+  .tab-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .tab-btn {
+    background: var(--panel); color: var(--muted); border: 1px solid var(--border);
+    padding: 9px 15px; border-radius: 8px; cursor: pointer; font-size: 12.5px; font-weight: 600;
+  }
+  .tab-btn:hover { color: var(--text); border-color: var(--accent); }
+  .tab-btn.active { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+  .tab-panel { display: none; background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .tab-panel.active { display: block; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--accent); text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.04em; position: sticky; top: 0; background: var(--panel2); }
+  tr:hover td { background: rgba(79, 176, 255, 0.05); }
+  .empty-msg { color: var(--muted); font-style: italic; }
+
+  .table-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .table-search {
+    background: #0d1319; color: var(--text); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; font-size: 12px; width: 240px;
+  }
+  .table-count { color: var(--muted); font-size: 12px; }
+  .table-scroll { max-height: 440px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .table-pagination { display: flex; justify-content: center; align-items: center; gap: 14px; margin-top: 10px; }
+  .table-pagination button {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 12px; font-size: 12px; cursor: pointer;
+  }
+  .page-label { color: var(--muted); font-size: 12px; }
+
+  .sev-pill { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; margin-right: 8px; margin-bottom: 14px; }
+  .sev-critical { background: rgba(255, 59, 107, 0.18); color: var(--critical); }
+  .sev-high { background: rgba(255, 107, 107, 0.18); color: var(--danger); }
+  .sev-medium { background: rgba(255, 183, 79, 0.18); color: var(--warn); }
+  .sev-low { background: rgba(127, 146, 163, 0.18); color: var(--muted); }
+  tr.row-sev-critical td:first-child { border-left: 3px solid var(--critical); }
+  tr.row-sev-high td:first-child { border-left: 3px solid var(--danger); }
+  tr.row-sev-medium td:first-child { border-left: 3px solid var(--warn); }
+  tr.row-sev-low td:first-child { border-left: 3px solid var(--muted); }
+
+  .chart-title { font-size: 12.5px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.04em; margin: 4px 0 10px 0; }
+  .chart-svg { width: 100%; height: auto; }
+  .chart-axis { stroke: var(--border); stroke-width: 1; }
+  .chart-label { fill: var(--muted); font-size: 9px; }
+  .chart-caption { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .error-banner {
+    background: rgba(255,107,107,0.12); border: 1px solid var(--danger); color: var(--danger);
+    border-radius: 8px; padding: 10px 14px; font-size: 12.5px; margin-bottom: 16px;
+  }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div class="brand">
+    <div class="icon">&#128737;&#65039;</div>
+    <div>
+      <h1>Log Analyzer</h1>
+      <p>Linux auth / syslog inspector</p>
+    </div>
+  </div>
+
+  <div id="drop-zone" class="drop-zone">
+    <div class="dz-icon">&#128193;</div>
+    <div class="dz-text">Drop log files here or click to browse</div>
+    <div class="dz-sub">.log / .txt / .gz supported</div>
+  </div>
+  <input type="file" id="file-input" multiple accept=".log,.txt,.gz">
+  <div class="file-list" id="file-list"></div>
+
+  <fieldset>
+    <legend>Brute Force Detection</legend>
+    <div class="field">
+      <label for="threshold">Threshold (failed attempts)</label>
+      <input type="number" id="threshold" value="{{ default_threshold }}" min="1">
+    </div>
+    <div class="field">
+      <label for="window">Window (seconds)</label>
+      <input type="number" id="window" value="{{ default_window }}" min="1">
+      <div class="hint">Attempts within this window count as "rapid" brute force.</div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Correlation &amp; Allowlist</legend>
+    <div class="field">
+      <label for="corr_window">Correlation window (seconds)</label>
+      <input type="number" id="corr_window" value="{{ default_corr_window }}" min="1">
+      <div class="hint">Flags a success following invalid-user probes from the same IP within this window.</div>
+    </div>
+    <div class="field">
+      <label for="allowlist">Allowlisted IPs / CIDR ranges</label>
+      <textarea id="allowlist" placeholder="10.0.0.5, 192.168.1.0/24"></textarea>
+      <div class="hint">Comma or newline separated. Still counted in totals, just not flagged.</div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Timestamps</legend>
+    <div class="field">
+      <label for="year">Assume year (optional)</label>
+      <input type="number" id="year" placeholder="e.g. 2025" min="1990" max="2100">
+      <div class="hint">For classic syslog timestamps with no year (e.g. rotated/archived logs).</div>
+    </div>
+  </fieldset>
+
+  <button id="analyze-btn">Run Analysis</button>
+  <div id="status-line"></div>
+</div>
+
+<div id="main">
+  <div id="empty-state">
+    <div class="big-icon">&#128202;</div>
+    <p>Add one or more log files on the left, then click <strong>Run Analysis</strong>.</p>
+  </div>
+
+  <div id="results">
+    <div id="error-banner-container"></div>
+    <div class="badges" id="badges"></div>
+    <div class="download-row" id="download-row"></div>
+
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="total" onclick="showTab('total')">Total Log Entries</button>
+      <button class="tab-btn" data-tab="failed" onclick="showTab('failed')" id="btn-failed-label">Failed Logins</button>
+      <button class="tab-btn" data-tab="success" onclick="showTab('success')" id="btn-success-label">Successful Logins</button>
+      <button class="tab-btn" data-tab="sudo" onclick="showTab('sudo')" id="btn-sudo-label">Sudo Commands</button>
+      <button class="tab-btn" data-tab="suspicious" onclick="showTab('suspicious')" id="btn-suspicious-label">Suspicious Events</button>
+      <button class="tab-btn" data-tab="topips" onclick="showTab('topips')">Top Source IPs</button>
+    </div>
+
+    <div class="tab-panel active" id="tab-total">
+      <table id="total-metrics-table"></table>
+      <h3 class="chart-title">Failed Logins Timeline</h3>
+      <div id="chart-container"></div>
+    </div>
+    <div class="tab-panel" id="tab-failed"></div>
+    <div class="tab-panel" id="tab-success"></div>
+    <div class="tab-panel" id="tab-sudo"></div>
+    <div class="tab-panel" id="tab-suspicious"></div>
+    <div class="tab-panel" id="tab-topips"></div>
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------- state
+let selectedFiles = [];
+let currentRunId = null;
+const tableState = {};
+
+// ---------------------------------------------------------------- file handling
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const fileListEl = document.getElementById('file-list');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  addFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', () => addFiles(fileInput.files));
+
+function addFiles(fileListObj) {
+  for (const f of fileListObj) {
+    if (!selectedFiles.some(existing => existing.name === f.name && existing.size === f.size)) {
+      selectedFiles.push(f);
+    }
+  }
+  renderFileList();
+}
+
+function removeFile(index) {
+  selectedFiles.splice(index, 1);
+  renderFileList();
+}
+
+function renderFileList() {
+  fileListEl.innerHTML = '';
+  selectedFiles.forEach((f, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'file-chip';
+    const sizeKb = (f.size / 1024).toFixed(1);
+    chip.innerHTML = `<span>${escapeHtml(f.name)} (${sizeKb} KB)</span><span class="remove-btn" onclick="removeFile(${i})">&times;</span>`;
+    fileListEl.appendChild(chip);
+  });
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+// ---------------------------------------------------------------- analysis run
+document.getElementById('analyze-btn').addEventListener('click', runAnalysis);
+
+async function runAnalysis() {
+  if (selectedFiles.length === 0) {
+    setStatus('Add at least one log file first.');
+    return;
+  }
+  const btn = document.getElementById('analyze-btn');
+  btn.disabled = true;
+  setStatus('<span class="spinner"></span>Analyzing...');
+
+  const form = new FormData();
+  selectedFiles.forEach(f => form.append('logfiles', f));
+  form.append('threshold', document.getElementById('threshold').value);
+  form.append('window', document.getElementById('window').value);
+  form.append('corr_window', document.getElementById('corr_window').value);
+  form.append('year', document.getElementById('year').value);
+  form.append('allowlist', document.getElementById('allowlist').value);
+
+  try {
+    const resp = await fetch('/analyze', { method: 'POST', body: form });
+    const data = await resp.json();
+    if (!resp.ok) {
+      setStatus('');
+      showError(data.error || 'Analysis failed.');
+      btn.disabled = false;
+      return;
+    }
+    renderResults(data);
+    setStatus('Done.');
+  } catch (err) {
+    setStatus('');
+    showError('Request failed: ' + err.message);
+  }
+  btn.disabled = false;
+}
+
+function setStatus(html) {
+  document.getElementById('status-line').innerHTML = html;
+}
+
+function showError(msg) {
+  document.getElementById('error-banner-container').innerHTML =
+    `<div class="error-banner">${escapeHtml(msg)}</div>`;
+}
+
+// ---------------------------------------------------------------- rendering
+function renderResults(summary) {
+  currentRunId = summary.run_id;
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('error-banner-container').innerHTML = '';
+
+  if (summary.rejected_files && summary.rejected_files.length) {
+    showError('Skipped unsupported file(s): ' + summary.rejected_files.join(', '));
+  }
+  if (summary.file_errors && summary.file_errors.length) {
+    showError('Errors reading file(s): ' + summary.file_errors.join('; '));
+  }
+
+  const t = summary.totals;
+  document.getElementById('badges').innerHTML = `
+    <div class="badge accent"><div class="num">${t.total_log_entries}</div><div class="label">Total Entries</div></div>
+    <div class="badge danger"><div class="num">${t.failed_login_count}</div><div class="label">Failed Logins</div></div>
+    <div class="badge ok"><div class="num">${t.successful_login_count}</div><div class="label">Successful Logins</div></div>
+    <div class="badge warn"><div class="num">${t.sudo_command_count}</div><div class="label">Sudo Commands</div></div>
+    <div class="badge danger"><div class="num">${t.suspicious_event_count}</div><div class="label">Suspicious Events</div></div>
+  `;
+
+  document.getElementById('download-row').innerHTML = `
+    <a href="/download/${summary.run_id}/html" target="_blank">&#11015;&#65039; Download HTML Report</a>
+    <a href="/download/${summary.run_id}/json" target="_blank">&#11015;&#65039; Download JSON Findings</a>
+  `;
+
+  document.getElementById('btn-failed-label').textContent = `Failed Logins (${t.failed_login_count})`;
+  document.getElementById('btn-success-label').textContent = `Successful Logins (${t.successful_login_count})`;
+  document.getElementById('btn-sudo-label').textContent = `Sudo Commands (${t.sudo_command_count})`;
+  document.getElementById('btn-suspicious-label').textContent = `Suspicious Events (${t.suspicious_event_count})`;
+
+  renderTotalTab(summary);
+  renderDataTab('failed', ['Timestamp', 'User', 'Source IP', 'Port', 'Invalid User'],
+    summary.failed_logins.map(e => [e.timestamp || '-', e.user, e.ip, e.port || '-', e.invalid_user ? 'yes' : 'no']),
+    'No failed login attempts found.');
+  renderDataTab('success', ['Timestamp', 'User', 'Source IP', 'Port', 'Method'],
+    summary.successful_logins.map(e => [e.timestamp || '-', e.user, e.ip, e.port || '-', e.method || '-']),
+    'No successful logins found.');
+  renderDataTab('sudo', ['Timestamp', 'User', 'Run As', 'Working Dir', 'Command'],
+    summary.sudo_commands.map(e => [e.timestamp || '-', e.user, e.run_as, e.pwd, e.command]),
+    'No sudo command executions found.');
+  renderSuspiciousTab(summary);
+  renderTopIpsTab(summary);
+}
+
+function renderTotalTab(summary) {
+  const t = summary.totals;
+  const s = summary.settings || {};
+  const rows = [
+    ['Total log entries', t.total_log_entries],
+    ['Parsed / classified entries', t.parsed_entries],
+    ['Unparsed entries', t.unparsed_entries],
+    ['Failed login attempts', t.failed_login_count],
+    ['Successful logins', t.successful_login_count],
+    ['Sudo commands executed', t.sudo_command_count],
+    ['Suspicious events flagged', t.suspicious_event_count],
+    ['Source file(s)', summary.source_files.join(', ')],
+    ['Brute-force threshold / window', `${s.brute_force_threshold} attempts within ${s.brute_force_window_seconds}s`],
+    ['Allowlisted IPs/ranges', (s.allowlisted_ips || []).join(', ') || 'none'],
+  ];
+  if (s.assumed_year_was_used) {
+    rows.push(['Year assumption', `Some timestamps had no year; assumed ${s.assumed_year}`]);
+  }
+  const table = document.getElementById('total-metrics-table');
+  table.innerHTML = '<thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>' +
+    rows.map(r => `<tr><td>${escapeHtml(String(r[0]))}</td><td>${escapeHtml(String(r[1]))}</td></tr>`).join('') +
+    '</tbody>';
+
+  document.getElementById('chart-container').innerHTML = buildHourlyChartSvg(summary.failed_logins_by_hour);
+}
+
+function buildHourlyChartSvg(hourly) {
+  if (!hourly || !hourly.some(v => v > 0)) {
+    return '<p class="empty-msg">No parseable timestamps were found, so an hourly timeline could not be built.</p>';
+  }
+  const width = 900, height = 200, padLeft = 34, padBottom = 26;
+  const chartW = width - padLeft - 10, chartH = height - padBottom - 10;
+  const maxVal = Math.max(...hourly) || 1;
+  const barW = chartW / 24;
+  let bars = '';
+  hourly.forEach((count, hour) => {
+    const barH = (count / maxVal) * chartH;
+    const x = padLeft + hour * barW;
+    const y = 10 + (chartH - barH);
+    const color = (count === maxVal && count > 0) ? 'var(--danger)' : 'var(--accent)';
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW*0.7).toFixed(1)}" height="${barH.toFixed(1)}" fill="${color}" rx="2"><title>${String(hour).padStart(2,'0')}:00 - ${count} failed attempt(s)</title></rect>`;
+    if (hour % 3 === 0) {
+      bars += `<text x="${x.toFixed(1)}" y="${height - 6}" class="chart-label">${String(hour).padStart(2,'0')}</text>`;
+    }
+  });
+  const axis = `<line x1="${padLeft}" y1="10" x2="${padLeft}" y2="${10+chartH}" class="chart-axis"/>` +
+               `<line x1="${padLeft}" y1="${10+chartH}" x2="${width-10}" y2="${10+chartH}" class="chart-axis"/>`;
+  return `<svg viewBox="0 0 ${width} ${height}" class="chart-svg">${axis}${bars}</svg>` +
+         `<p class="chart-caption">Failed login attempts by hour of day (all days combined). Hover a bar for the exact count.</p>`;
+}
+
+function renderDataTab(key, headers, rows, emptyMsg) {
+  const panel = document.getElementById('tab-' + key);
+  if (rows.length === 0) {
+    panel.innerHTML = `<p class="empty-msg">${escapeHtml(emptyMsg)}</p>`;
+    return;
+  }
+  const tableId = 'table-' + key;
+  panel.innerHTML = buildTableBlock(tableId, headers, rows);
+  initTable(tableId, 25);
+}
+
+function renderSuspiciousTab(summary) {
+  const events = summary.suspicious_events;
+  const severityCounts = {};
+  events.forEach(e => { severityCounts[e.severity] = (severityCounts[e.severity] || 0) + 1; });
+  let pillsHtml = '';
+  ['critical', 'high', 'medium', 'low'].forEach(sev => {
+    if (severityCounts[sev]) {
+      pillsHtml += `<span class="sev-pill sev-${sev}">${sev.toUpperCase()}: ${severityCounts[sev]}</span>`;
+    }
+  });
+
+  const panel = document.getElementById('tab-suspicious');
+  if (events.length === 0) {
+    panel.innerHTML = '<p class="empty-msg">No suspicious events detected.</p>';
+    return;
+  }
+  const rows = events.map(e => [(e.severity || 'low').toUpperCase(), e.timestamp || '-', e.type, e.ip || '-', e.detail]);
+  const rowClasses = events.map(e => 'row-sev-' + (e.severity || 'low'));
+  const tableId = 'table-suspicious';
+  panel.innerHTML = pillsHtml + buildTableBlock(tableId, ['Severity', 'Timestamp', 'Type', 'IP', 'Detail'], rows, rowClasses);
+  initTable(tableId, 25);
+}
+
+function renderTopIpsTab(summary) {
+  const rows = summary.top_source_ips_failed_logins.map(r => [r.ip, r.failed_attempts]);
+  const panel = document.getElementById('tab-topips');
+  if (rows.length === 0) {
+    panel.innerHTML = '<p class="empty-msg">No failed login source IPs found.</p>';
+    return;
+  }
+  panel.innerHTML = '<table><thead><tr><th>Source IP</th><th>Failed Attempts</th></tr></thead><tbody>' +
+    rows.map(r => `<tr><td>${escapeHtml(String(r[0]))}</td><td>${escapeHtml(String(r[1]))}</td></tr>`).join('') +
+    '</tbody></table>';
+}
+
+function buildTableBlock(tableId, headers, rows, rowClasses) {
+  let html = `<div class="table-toolbar">
+    <input type="text" class="table-search" placeholder="Filter rows..." oninput="filterTable('${tableId}', this.value)">
+    <span class="table-count">${rows.length} row(s)</span>
+  </div>
+  <div class="table-scroll"><table id="${tableId}"><thead><tr>`;
+  headers.forEach(h => { html += `<th>${escapeHtml(h)}</th>`; });
+  html += '</tr></thead><tbody>';
+  rows.forEach((row, i) => {
+    const cls = rowClasses ? ` class="${rowClasses[i]}"` : '';
+    html += `<tr${cls}>`;
+    row.forEach(cell => { html += `<td>${escapeHtml(cell === null || cell === undefined ? '' : String(cell))}</td>`; });
+    html += '</tr>';
+  });
+  html += `</tbody></table></div>
+  <div class="table-pagination">
+    <button onclick="pageTable('${tableId}', -1)">&larr; Prev</button>
+    <span id="${tableId}-page-label" class="page-label"></span>
+    <button onclick="pageTable('${tableId}', 1)">Next &rarr;</button>
+  </div>`;
+  return html;
+}
+
+function initTable(id, pageSize) {
+  const table = document.getElementById(id);
+  if (!table) return;
+  const rows = Array.from(table.querySelectorAll('tbody tr'));
+  tableState[id] = { rows: rows, page: 0, pageSize: pageSize, filtered: rows };
+  renderTablePage(id);
+}
+
+function renderTablePage(id) {
+  const st = tableState[id];
+  if (!st) return;
+  const totalPages = Math.max(1, Math.ceil(st.filtered.length / st.pageSize));
+  if (st.page >= totalPages) st.page = totalPages - 1;
+  if (st.page < 0) st.page = 0;
+  st.rows.forEach(r => { r.style.display = 'none'; });
+  st.filtered.slice(st.page * st.pageSize, (st.page + 1) * st.pageSize).forEach(r => { r.style.display = ''; });
+  const label = document.getElementById(id + '-page-label');
+  if (label) label.textContent = `Page ${st.page + 1} of ${totalPages} (${st.filtered.length} matching row(s))`;
+}
+
+function filterTable(id, query) {
+  const st = tableState[id];
+  if (!st) return;
+  query = query.trim().toLowerCase();
+  st.filtered = query ? st.rows.filter(r => r.textContent.toLowerCase().includes(query)) : st.rows;
+  st.page = 0;
+  renderTablePage(id);
+}
+
+function pageTable(id, delta) {
+  const st = tableState[id];
+  if (!st) return;
+  st.page += delta;
+  renderTablePage(id);
+}
+
+function showTab(key) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + key).classList.add('active');
+  document.querySelector(`.tab-btn[data-tab="${key}"]`).classList.add('active');
+}
+</script>
+</body>
+</html>
