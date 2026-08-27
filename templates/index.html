@@ -18,7 +18,6 @@
   }
   a { color: var(--accent); }
 
-  /* ---------- Sidebar ---------- */
   #sidebar {
     width: 320px; flex-shrink: 0; background: #0d1319; border-right: 1px solid var(--border);
     padding: 24px 20px; display: flex; flex-direction: column; gap: 18px;
@@ -74,7 +73,7 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ---------- Main content ---------- */
+  
   #main { flex: 1; padding: 28px 34px; min-width: 0; }
   #empty-state { color: var(--muted); text-align: center; margin-top: 120px; }
   #empty-state .big-icon { font-size: 44px; margin-bottom: 12px; }
@@ -240,12 +239,12 @@
 </div>
 
 <script>
-// ---------------------------------------------------------------- state
+
 let selectedFiles = [];
 let currentRunId = null;
 const tableState = {};
 
-// ---------------------------------------------------------------- file handling
+
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const fileListEl = document.getElementById('file-list');
@@ -291,7 +290,7 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
-// ---------------------------------------------------------------- analysis run
+  
 document.getElementById('analyze-btn').addEventListener('click', runAnalysis);
 
 async function runAnalysis() {
@@ -338,7 +337,7 @@ function showError(msg) {
     `<div class="error-banner">${escapeHtml(msg)}</div>`;
 }
 
-// ---------------------------------------------------------------- rendering
+
 function renderResults(summary) {
   currentRunId = summary.run_id;
   document.getElementById('empty-state').style.display = 'none';
