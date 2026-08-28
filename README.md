@@ -79,15 +79,15 @@ This generates `log_report.html` and `log_findings.json` in the current director
 
 **Options:**
 
- `-i`, `--input` : Path(s) to log file(s) to analyze (`.log`, `.txt`, or `.gz`). Accepts multiple files. 
- `-o`, `--outdir` : Output directory for the report.
- `--html-name` : Filename for the HTML report. 
- `--json-name` : Filename for the JSON findings.
- `--brute-force-threshold` : Failed attempts from one IP to flag as brute force.
- `--brute-force-window` : Rolling time window (seconds) for brute-force detection.
- `--allowlist-ip` : IP(s) or CIDR range(s) to exclude from suspicious flagging (still counted in totals).
- `--correlation-window` : Lookback window (seconds) for flagging a success following a burst of failures.
- `--year` : Year to assume for timestamps that omit one. 
+`-i`, `--input` : Path(s) to log file(s) to analyze (`.log`, `.txt`, or `.gz`). Accepts multiple files. 
+`-o`, `--outdir` : Output directory for the report.
+`--html-name` : Filename for the HTML report. 
+`--json-name` : Filename for the JSON findings.
+`--brute-force-threshold` : Failed attempts from one IP to flag as brute force.
+`--brute-force-window` : Rolling time window (seconds) for brute-force detection.
+`--allowlist-ip` : IP(s) or CIDR range(s) to exclude from suspicious flagging (still counted in totals).
+`--correlation-window` : Lookback window (seconds) for flagging a success following a burst of failures.
+`--year` : Year to assume for timestamps that omit one. 
 
 **Example with custom options:**
 ```bash
